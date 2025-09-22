@@ -26,8 +26,7 @@ import os
 import json
 import time
 
-from .exceptions import PDNSCanonicalError
-
+from .exceptions import PDNSCanonicalError, PDNSError
 
 LOG = logging.getLogger(__name__)
 
@@ -39,6 +38,7 @@ class PDNSEndpointBase(object):
 
     :param PDNSApiClient api_client: Cachet API client instance
     """
+
     def __init__(self, api_client):
         """Initialization method"""
         self.api_client = api_client
@@ -56,13 +56,14 @@ class PDNSEndpoint(PDNSEndpointBase):
 
     .. seealso:: https://doc.powerdns.com/md/httpapi/api_spec/#api-spec
     """
+
     def __init__(self, api_client):
         """Initialization method"""
         self._servers = None
         super(PDNSEndpoint, self).__init__(api_client)
 
     def __repr__(self):
-        return 'PDNSEndpoint(%s)' % repr(self.api_client)
+        return "PDNSEndpoint(%s)" % repr(self.api_client)
 
     def __str__(self):
         return str(self.api_client)
@@ -79,8 +80,9 @@ class PDNSEndpoint(PDNSEndpointBase):
         LOG.info("listing available PowerDNS servers")
         if not self._servers:
             LOG.info("getting available servers from API")
-            self._servers = [PDNSServer(self.api_client, data)
-                             for data in self._get('/servers')]
+            self._servers = [
+                PDNSServer(self.api_client, data) for data in self._get("/servers")
+            ]
         LOG.info("%d server(s) listed", len(self._servers))
         LOG.debug("listed servers: %s", self._servers)
         return self._servers
@@ -106,21 +108,20 @@ class PDNSServer(PDNSEndpointBase):
 
     .. seealso:: https://doc.powerdns.com/md/httpapi/api_spec/#servers
     """
+
     def __init__(self, api_client, api_data):
         """Initialization method"""
         self._api_client = api_client
         self._api_data = api_data
-        self.sid = api_data['id']
-        self.version = api_data['version']
-        self.daemon_type = api_data['daemon_type']
-        self.url = '/servers/%s' % self.sid
+        self.sid = api_data["id"]
+        self.version = api_data["version"]
+        self.daemon_type = api_data["daemon_type"]
+        self.url = "/servers/%s" % self.sid
         self._zones = None
         super(PDNSServer, self).__init__(api_client)
 
     def __repr__(self):
-        return 'PDNSServer(%s, %s)' % (
-            repr(self._api_client), repr(self._api_data)
-        )
+        return "PDNSServer(%s, %s)" % (repr(self._api_client), repr(self._api_data))
 
     def __str__(self):
         return self.sid
@@ -132,7 +133,7 @@ class PDNSServer(PDNSEndpointBase):
         .. seealso:: https://doc.powerdns.com/md/httpapi/api_spec/#url-apiv1serversserver95idconfig
         """
         LOG.info("getting server configuration")
-        return self._get('%s/config' % self.url)
+        return self._get("%s/config" % self.url)
 
     @property
     def zones(self):
@@ -147,8 +148,10 @@ class PDNSServer(PDNSEndpointBase):
         LOG.info("listing available zones")
         if not self._zones:
             LOG.info("getting available zones from API")
-            self._zones = [PDNSZone(self.api_client, self, data)
-                           for data in self._get('%s/zones' % self.url)]
+            self._zones = [
+                PDNSZone(self.api_client, self, data)
+                for data in self._get("%s/zones" % self.url)
+            ]
         LOG.info("%d zone(s) listed", len(self._zones))
         LOG.debug("listed zones: %s", self._zones)
         return self._zones
@@ -194,11 +197,9 @@ class PDNSServer(PDNSEndpointBase):
             }
         """
         LOG.info("api search terms: %s", search_term)
-        results = self._get('%s/search-data?q=%s&max=%d' % (
-            self.url,
-            search_term,
-            max_result
-        ))
+        results = self._get(
+            "%s/search-data?q=%s&max=%d" % (self.url, search_term, max_result)
+        )
         LOG.info("%d search result(s)", len(results))
         LOG.debug("search results: %s", results)
         return results
@@ -212,12 +213,18 @@ class PDNSServer(PDNSEndpointBase):
 
         .. seealso:: https://doc.powerdns.com/md/httpapi/api_spec/#zone95collection
         """
-        LOG.info("getting zone: %s", name)
-        for zone in self.zones:
-            if zone.name == name:
-                LOG.debug("found zone: %s", zone)
-                return zone
-        LOG.info("zone not found: %s", name)
+        try:
+            LOG.info("getting zone: %s", name)
+            zone_data = self.server._get(f"{self.server.url}/zones/{name}")
+            zone = PDNSZone(self.server.api_client, self.server, zone_data)
+
+            LOG.debug("found zone: %s", zone)
+            return zone
+        except PDNSError as err:
+            if err.status_code == 404:
+                LOG.info("zone not found: %s", name)
+                return None
+            raise err
 
     def suggest_zone(self, r_name):
         """Suggest best matching zone from existing zone
@@ -234,7 +241,7 @@ class PDNSServer(PDNSEndpointBase):
         :return: Zone as :class:`PDNSZone` object or :obj:`None`
         """
         LOG.info("suggesting zone for: %s", r_name)
-        if not r_name.endswith('.'):
+        if not r_name.endswith("."):
             raise PDNSCanonicalError(r_name)
         best_match = None
         for zone in self.zones:
@@ -249,8 +256,16 @@ class PDNSServer(PDNSEndpointBase):
     # pylint: disable=inconsistent-return-statements
     # pylint: disable=too-many-arguments
     # TODO: Full implementation of zones endpoint
-    def create_zone(self, name, kind, nameservers, masters=None, servers=None,
-                    rrsets=None, update=False):
+    def create_zone(
+        self,
+        name,
+        kind,
+        nameservers,
+        masters=None,
+        servers=None,
+        rrsets=None,
+        update=False,
+    ):
         """Create or update a (new) zone
 
         :param str name: Name of zone
@@ -270,19 +285,19 @@ class PDNSServer(PDNSEndpointBase):
             "nameservers": nameservers,
         }
         if masters:
-            zone_data['masters'] = masters
+            zone_data["masters"] = masters
         if servers:
-            zone_data['servers'] = servers
+            zone_data["servers"] = servers
         if rrsets:
-            zone_data['rrsets'] = rrsets
+            zone_data["rrsets"] = rrsets
 
         if update is True:
             LOG.info("update of zone: %s", name)
             get_zone = self.get_zone(name).details
-            zone_id = get_zone['id']
-            zone_data = self._patch("{}/zones/{}".format(self.url,
-                                                         zone_id),
-                                    data=zone_data)
+            zone_id = get_zone["id"]
+            zone_data = self._patch(
+                "{}/zones/{}".format(self.url, zone_id), data=zone_data
+            )
 
         else:
             LOG.info("creation of zone: %s", name)
@@ -315,12 +330,12 @@ class PDNSServer(PDNSEndpointBase):
         with open(json_file) as backup_fp:
             zone_data = json.load(backup_fp)
         self._zones = None
-        zone_name = zone_data['name']
-        zone_data['nameservers'] = []
+        zone_name = zone_data["name"]
+        zone_data["nameservers"] = []
         LOG.info("restoration of zone: %s", zone_name)
         zone_data = self._post("%s/zones" % self.url, data=zone_data)
         if zone_data:
-            LOG.info("zone successfully restored: %s", zone_data['name'])
+            LOG.info("zone successfully restored: %s", zone_data["name"])
             return PDNSZone(self.api_client, self, zone_data)
         LOG.info("%s zone restoration failed", zone_name)
 
@@ -332,19 +347,22 @@ class PDNSZone(PDNSEndpointBase):
     :param PDNSServer server: PowerDNS server instance
     :param dict api_data: PowerDNS API zone data
     """
+
     def __init__(self, api_client, server, api_data):
         """Initialization method"""
         self._api_client = api_client
         self._api_data = api_data
         self.server = server
-        self.name = api_data['name']
-        self.url = '%s/zones/%s' % (self.server.url, self.name)
+        self.name = api_data["name"]
+        self.url = "%s/zones/%s" % (self.server.url, self.name)
         self._details = None
         super(PDNSZone, self).__init__(api_client)
 
     def __repr__(self):
         return "PDNSZone(%s, %s, %s)" % (
-            repr(self._api_client), repr(self.server), repr(self._api_data)
+            repr(self._api_client),
+            repr(self.server),
+            repr(self._api_data),
         )
 
     def __str__(self):
@@ -363,7 +381,7 @@ class PDNSZone(PDNSEndpointBase):
     def records(self):
         """Get zone's records"""
         LOG.info("getting %s zone records", self.name)
-        return self.details['rrsets']
+        return self.details["rrsets"]
 
     def get_record(self, name):
         """Get record data
@@ -373,8 +391,8 @@ class PDNSZone(PDNSEndpointBase):
         """
         records = []
         LOG.info("getting zone record: %s", name)
-        for record in self.details['rrsets']:
-            if name == record['name']:
+        for record in self.details["rrsets"]:
+            if name == record["name"]:
                 LOG.info("record found: %s", name)
                 records.append(record)
 
@@ -393,11 +411,11 @@ class PDNSZone(PDNSEndpointBase):
         LOG.debug("records: %s", rrsets)
         for rrset in rrsets:
             rrset.ensure_canonical(self.name)
-            rrset['changetype'] = 'REPLACE'
+            rrset["changetype"] = "REPLACE"
 
         # reset zone object cache
         self._details = None
-        return self._patch(self.url, data={'rrsets': rrsets})
+        return self._patch(self.url, data={"rrsets": rrsets})
 
     def delete_records(self, rrsets):
         """Delete resource record sets
@@ -409,11 +427,11 @@ class PDNSZone(PDNSEndpointBase):
         LOG.debug("records: %s", rrsets)
         for rrset in rrsets:
             rrset.ensure_canonical(self.name)
-            rrset['changetype'] = 'DELETE'
+            rrset["changetype"] = "DELETE"
 
         # reset zone object cache
         self._details = None
-        return self._patch(self.url, data={'rrsets': rrsets})
+        return self._patch(self.url, data={"rrsets": rrsets})
 
     def backup(self, directory, filename=None, pretty_json=False):
         """Backup zone data to json file
@@ -427,17 +445,15 @@ class PDNSZone(PDNSEndpointBase):
         """
         LOG.info("backup of zone: %s", self.name)
         if not filename:
-            filename = self.name.rstrip('.') + ".json"
+            filename = self.name.rstrip(".") + ".json"
         json_file = os.path.join(directory, filename)
         LOG.info("backup file is %s", json_file)
 
         with open(json_file, "w") as backup_fp:
             if pretty_json:
-                json.dump(self.details,
-                          backup_fp,
-                          ensure_ascii=True,
-                          indent=2,
-                          sort_keys=True)
+                json.dump(
+                    self.details, backup_fp, ensure_ascii=True, indent=2, sort_keys=True
+                )
             else:
                 json.dump(self.details, backup_fp)
         LOG.info("zone %s successfully saved", self.name)
@@ -445,7 +461,7 @@ class PDNSZone(PDNSEndpointBase):
     def notify(self):
         """Trigger notification for zone updates"""
         LOG.info("notify of zone: %s", self.name)
-        return self._put(self.url + '/notify')
+        return self._put(self.url + "/notify")
 
 
 # pylint: disable=line-too-long
@@ -464,34 +480,40 @@ class RRSet(dict):
 
     .. seealso:: https://doc.powerdns.com/md/httpapi/api_spec/#url-apiv1serversserver95idzoneszone95id
     """
-    def __init__(self, name, rtype, records, ttl=3600, changetype='REPLACE',
-                 comments=None):
+
+    def __init__(
+        self, name, rtype, records, ttl=3600, changetype="REPLACE", comments=None
+    ):
         """Initialization"""
         LOG.debug("new rrset object for %s", name)
         super(RRSet, self).__init__()
         self.raw_records = records
-        self['name'] = name
-        self['type'] = rtype
-        self['changetype'] = changetype
-        self['ttl'] = ttl
-        self['records'] = []
+        self["name"] = name
+        self["type"] = rtype
+        self["changetype"] = changetype
+        self["ttl"] = ttl
+        self["records"] = []
         for record in records:
             disabled = False
             if isinstance(record, dict):
                 if set(record.keys()) > {"content", "disabled"}:
-                    raise ValueError(f"Dictionary { records } has more keys than 'content' and 'disabled'")
+                    raise ValueError(
+                        f"Dictionary {records} has more keys than 'content' and 'disabled'"
+                    )
                 if "content" not in record.keys():
-                    raise ValueError(f"Dictionary { records } does not have the 'content' key.")
+                    raise ValueError(
+                        f"Dictionary {records} does not have the 'content' key."
+                    )
                 if "disabled" not in record.keys():
                     record["disabled"] = False
 
-                self['records'].append(record)
+                self["records"].append(record)
                 continue
 
             if isinstance(record, (list, tuple)):
                 disabled = record[1]
                 record = record[0]
-            self['records'].append({'content': record, 'disabled': disabled})
+            self["records"].append({"content": record, "disabled": disabled})
         if comments is None:
             self["comments"] = list()
         else:
@@ -499,12 +521,12 @@ class RRSet(dict):
 
     def __repr__(self):
         return "RRSet(%s, %s, %s, %s, %s, %s)" % (
-            repr(self['name']),
-            repr(self['type']),
+            repr(self["name"]),
+            repr(self["type"]),
             repr(self.raw_records),
-            repr(self['ttl']),
-            repr(self['changetype']),
-            repr(self['comments']),
+            repr(self["ttl"]),
+            repr(self["changetype"]),
+            repr(self["comments"]),
         )
 
     def __str__(self):
@@ -516,11 +538,13 @@ class RRSet(dict):
             else:
                 records += [record]
 
-        return "(ttl=%d) %s  %s  %s %s)" % (self['ttl'],
-                                            self['name'],
-                                            self['type'],
-                                            records,
-                                            self['comments'],)
+        return "(ttl=%d) %s  %s  %s %s)" % (
+            self["ttl"],
+            self["name"],
+            self["type"],
+            records,
+            self["comments"],
+        )
 
     def ensure_canonical(self, zone):
         """Ensure every record names are canonical
@@ -534,18 +558,17 @@ class RRSet(dict):
             This method update :class:`RRSet` data to ensure the use of
             canonical names. It is actually not possible to revert values.
         """
-        LOG.debug("ensuring rrset %s is canonical", self['name'])
-        if not zone.endswith('.'):
+        LOG.debug("ensuring rrset %s is canonical", self["name"])
+        if not zone.endswith("."):
             raise PDNSCanonicalError(zone)
-        if not self['name'].endswith('.'):
-            LOG.debug("transforming %s with %s", self['name'], zone)
-            self['name'] += ".%s" % zone
-        if self['type'] == 'CNAME':
-            for record in self['records']:
-                if not record['content'].endswith('.'):
-                    LOG.debug("transforming %s with %s",
-                              record['content'], zone)
-                    record['content'] += ".%s" % zone
+        if not self["name"].endswith("."):
+            LOG.debug("transforming %s with %s", self["name"], zone)
+            self["name"] += ".%s" % zone
+        if self["type"] == "CNAME":
+            for record in self["records"]:
+                if not record["content"].endswith("."):
+                    LOG.debug("transforming %s with %s", record["content"], zone)
+                    record["content"] += ".%s" % zone
 
 
 class Comment(dict):
