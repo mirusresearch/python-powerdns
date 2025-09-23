@@ -34,7 +34,6 @@ ZONE = API.servers[0].get_zone("test.outini.net.")
 
 
 class TestEndpoint(TestCase):
-
     def test_endpoint_attributes(self):
         self.assertIsInstance(API.api_client, PDNSApiClient)
         self.assertTrue(hasattr(API, "servers"))
@@ -51,7 +50,6 @@ class TestEndpoint(TestCase):
 
 
 class TestServers(TestCase):
-
     def test_server_object(self):
         # server_repr = "PDNSServer(%s, %s)"
         # self.assertEqual(repr(SERVER), server_repr)
@@ -73,13 +71,24 @@ class TestServers(TestCase):
         timers = "28800 7200 604800 86400"
         soa = "ns01.test.outini.net. admin.outini.net. %s %s" % (serial, timers)
         comments = [Comment("test comment", "admin")]
-        soa_r = RRSet(name=zone_name, rtype="SOA", ttl=86400,
-                      records=[(soa, False)], comments=comments)
-        zone_data = dict(name=zone_name,
-                         kind="Master",
-                         rrsets=[soa_r],
-                         nameservers=["ns01.test.outini.net.",
-                                      "ns02.test.outini.net."])
+        soa_r = RRSet(
+            name=zone_name,
+            rtype="SOA",
+            ttl=86400,
+            records=[(soa, False)],
+            comments=comments,
+        )
+        zone_data = dict(
+            name=zone_name,
+            kind="Master",
+            rrsets=[soa_r],
+            nameservers=["ns01.test.outini.net.", "ns02.test.outini.net."],
+        )
+
+        try:
+            SERVER.delete_zone(zone_name)
+        except Exception:
+            pass
 
         zone = SERVER.create_zone(**zone_data)
         self.assertIsInstance(zone, PDNSZone)
@@ -106,27 +115,25 @@ class TestServers(TestCase):
 
 
 class TestRRSetRecords(TestCase):
-
     def test_dict_correct(self):
-        rrset = RRSet("test", "TXT", [{"content": "foo"},
-                                      {"content": "bar", "disabled": False},
-                                      {"content": "baz", "disabled": True}])
+        rrset = RRSet(
+            "test",
+            "TXT",
+            [
+                {"content": "foo"},
+                {"content": "bar", "disabled": False},
+                {"content": "baz", "disabled": True},
+            ],
+        )
 
-        self.assertEqual(rrset["records"][0],
-                         {"content": "foo", "disabled": False})
-        self.assertEqual(rrset["records"][1],
-                         {"content": "bar", "disabled": False})
-        self.assertEqual(rrset["records"][2],
-                         {"content": "baz", "disabled": True})
+        self.assertEqual(rrset["records"][0], {"content": "foo", "disabled": False})
+        self.assertEqual(rrset["records"][1], {"content": "bar", "disabled": False})
+        self.assertEqual(rrset["records"][2], {"content": "baz", "disabled": True})
 
     def test_dict_additional_key(self):
         with self.assertRaises(ValueError):
-            RRSet("test", "TXT", [{"content": "baz",
-                                   "disabled": False,
-                                   "foo": "bar"}])
+            RRSet("test", "TXT", [{"content": "baz", "disabled": False, "foo": "bar"}])
 
     def test_dict_missing_key(self):
         with self.assertRaises(ValueError):
-            RRSet("test", "TXT", [{"content": "baz",
-                                   "disabled": False,
-                                   "foo": "bar"}])
+            RRSet("test", "TXT", [{"content": "baz", "disabled": False, "foo": "bar"}])

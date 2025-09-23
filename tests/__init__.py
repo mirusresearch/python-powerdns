@@ -24,14 +24,13 @@ from unittest import TestCase
 
 
 PDNS_KEY = "MySupErS3cureK3y"
-PDNS_API = "http://172.17.0.2:8081/api/v1"
+PDNS_API = "http://localhost:8081/api/v1"
 
-API_CLIENT = powerdns.PDNSApiClient(api_endpoint=PDNS_API,
-                                    api_key=PDNS_KEY,
-                                    verify=False)
+API_CLIENT = powerdns.PDNSApiClient(
+    api_endpoint=PDNS_API, api_key=PDNS_KEY, verify=False
+)
 
 
 class TestLogger(TestCase):
-
     def test_logger_creation(self):
         self.assertIsInstance(powerdns.basic_logger("test", 2, 1), Logger)

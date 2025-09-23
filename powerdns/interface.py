@@ -215,7 +215,7 @@ class PDNSServer(PDNSEndpointBase):
         """
         try:
             LOG.info("getting zone: %s", name)
-            zone_data = self._get("%s/zones" % self.url)
+            zone_data = self._get("%s/zones/%s" % (self.url, name))
             zone = PDNSZone(self.api_client, self, zone_data)
 
             LOG.debug("found zone: %s", zone)
